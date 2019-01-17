@@ -1,11 +1,5 @@
-use_cuda = true
-if (isdefined(Main, :use_cuda) && Main.use_cuda==false)
-    error("use_cuda must be true")
-end
-
 using Test, Images
 using CuArrays, CUDAdrv, CUDAnative, RegisterCore, CenterIndexedArrays
-#using RegisterUtilities
 import RegisterMismatchCuda
 RM = RegisterMismatchCuda
 
@@ -27,6 +21,7 @@ end
         threadspb = RM.calculate_threads(sz, attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK))
         nblocks = ceil.(Int, sz ./ threadspb)
         @cuda blocks = nblocks threads = threadspb RM.kernel_conv_components!(G1, G2, G0)
+        synchronize()
         A0, A1, A2 = Array(G0), Array(G1), Array(G2)
     end
 
@@ -74,6 +69,7 @@ end
         nblocks = ceil.(Int, sz ./ threadspb)
         args = (d_f, d_f2, d_tf, d_m, d_m2, d_tm, d_numerator, d_denominator)
         @cuda blocks = nblocks threads = threadspb kernel(args...)
+        synchronize()
         Array(d_numerator), Array(d_denominator)
     end
 
@@ -117,61 +113,6 @@ end
             num_gpu, denom_gpu = run_gpu(RM.kernel_calcNumDenom_pixels!,A,B,C,D,E,F)
             @test ≈(num_cpu, num_gpu, atol=accuracy)
             @test ≈(denom_cpu, denom_gpu, atol=accuracy)
-#        end
-#    end
-end
-
-
-@testset "kernel_fdshift" begin
-    function run_cpu!(f::Function, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
-        for i in CartesianIndices(data1fft)
-            f(i, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
-        end
-    end
-
-    function run_gpu!(kernel::Function, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
-        d_d1 = CuArray(data1fft)
-        d_d2 = CuArray(data2fft)
-        sz = size(data1fft)
-        threadspb = RM.calculate_threads(sz, attribute(device(), CUDAdrv.MAX_THREADS_PER_BLOCK))
-        nblocks = ceil.(Int, sz ./ threadspb)
-        args = (d_d1, d_d2, shift1, shift2, shift3, N1, normalize)
-        @cuda blocks = nblocks threads = threadspb kernel(args...)
-        copyto!(data1fft, Array(d_d1))
-        copyto!(data2fft, Array(d_d2))
-    end
-
-    function fdshift!(i, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
-        Tc = eltype(data1fft)
-        Tr = eltype(shift1)
-        N = length(i)
-        tau = Tr(6.283185307179586)
-        sz = size(data1fft)
-        if checkbounds(Bool, data1fft, i)
-            arg = Tr((tau*shift1)/N1*i[1])
-            N > 1 ? arg = arg + Tr((tau*shift2)/sz[2]*i[2]) : nothing
-            N > 2 ? arg = arg + Tr((tau*shift3)/sz[3]*i[3]) : nothing
-            phase = Tc(cos(arg),sin(arg))/normalize
-            data1fft[i] = data1fft[i] * phase
-            data2fft[i] = data2fft[i] * phase
-        end
-    end
-
-#    for dev in devlist
-#        device!(dev) do
-            Ac = rand(Complex{Float64},3,3)
-            Bc = rand(Complex{Float64},3,3)
-            Ag = copy(Ac)
-            Bg = copy(Bc)
-            shift1 = convert(Float64,-1)
-            shift2 = convert(Float64,-2)
-            shift3 = convert(Float64,0)
-            N1 = (size(Ac,1)-1)*2
-            normalize = length(Ac)
-            run_cpu!(fdshift!,Ac,Bc,shift1,shift2,shift3,N1,normalize)
-            run_gpu!(RM.kernel_fdshift!,Ag,Bg,shift1,shift2,shift3,N1,normalize)
-            @test ≈(Ac, Ag, atol=accuracy)
-            @test ≈(Bc, Bg, atol=accuracy)
 #        end
 #    end
 end

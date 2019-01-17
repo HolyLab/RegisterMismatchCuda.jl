@@ -90,7 +90,6 @@ mutable struct CMStorage{T<:AbstractFloat,N}
     # the next two store the result of calling plan_fft! and plan_ifft!
     fftfunc::Any
     ifftfunc::Any
-    fdshift::Vector{Int} # shift needed to unwrap (fftshift)
     shiftindices::Vector{Vector{Int}} # indices for performing fftshift & snipping from -maxshift:maxshift
 
     function CMStorage{T,N}(::Type{T}, aperture_width::WidthLike, maxshift::DimsLike) where {T<:AbstractFloat,N}
@@ -108,9 +107,8 @@ mutable struct CMStorage{T<:AbstractFloat,N}
         numhost, denomhost = Array{T}(undef, mmsz), Array{T}(undef, mmsz)
         fftfunc, ifftfunc = plan_fft_pair(num)
         maxshiftv = [maxshift...]
-        fdshift = [-maxshift[i] for i = 1:length(maxshift)]
         shiftindices = Vector{Int}[ [padszt[i].+(-maxshift[i]+1:0); 1:maxshift[i]+1] for i = 1:length(maxshift) ]
-        new{T,N}(Float64[aperture_width...], maxshiftv, getindexes, setindexes, fixed, moving, num, denom, numhost, denomhost, fftfunc, ifftfunc, fdshift, shiftindices)
+        new{T,N}(Float64[aperture_width...], maxshiftv, getindexes, setindexes, fixed, moving, num, denom, numhost, denomhost, fftfunc, ifftfunc, shiftindices)
     end
 end
 # Note: display doesn't do anything
@@ -290,28 +288,14 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
         throw(ArgumentError("normalizeby=$(normalizeby) not recognized"))
     end
     synchronize()
-    # Perform the equivalent of the fftshift
-#    fdshift = cms.fdshift
+
+    # Compute the IFFTs
     d_num = cms.num.R
     d_denom = cms.denom.R
-#=    args = (d_numC, d_denomC,
-            convert(T,fdshift[1]),
-            convert(T,length(fdshift)>1 ? fdshift[2] : 0),
-            convert(T,length(fdshift)>2 ? fdshift[3] : 0),
-            size(d_num,1),
-            length(d_num))
-    @cuda blocks = nblocks threads = threadspb kernel_fdshift!(args...)
-    synchronize()
-=#
-    # Compute the IFFTs
     rng = cms.num.rng
     copyto!(d_num, rng, cms.ifftfunc * d_numC, rng)
     copyto!(d_denom, rng, cms.ifftfunc * d_denomC, rng)
     # Copy result to host
-    #destI = ntuple(d->1:2*cms.maxshift[d]+1, nd)
-    #copyto!(cms.numhost,   destI, d_num,   destI)
-    #copyto!(cms.denomhost, destI, d_denom, destI)
-    #copyto!(mm, (cms.numhost, cms.denomhost))
     copyto!(mm, (view(Array(d_num), cms.shiftindices...), view(Array(d_denom), cms.shiftindices...)))
 end
 

@@ -28,11 +28,9 @@ The array-dimension parameters must be the same for all 3 arrays. =#
 function kernel_conv_components!(A::T, A2::T, thetaA::T) where T
     Tel = eltype(T)
     i = cucartesianindex(A)
-#	@cuprintf("threadIdx = (%1d,%1d,%1d)\n", i[1], i[2], i[3])
     if checkbounds(Bool, A, i)
         local_A = A[i]
         local_thetaA = isnan(local_A)
-#	@cuprintf("local_thetaA = %f, A[i] = %f\n", local_thetaA, A[i])
         if local_thetaA
             local_A = Tel(0)
             A[i] = local_A
@@ -48,7 +46,6 @@ function kernel_calcNumDenom_intensity!(f_fft::T, f2_fft::T, thetaf_fft::T,
                                         m_fft::T, m2_fft::T, thetam_fft::T,
                                         numerator_fft::T, denominator_fft::T) where T
     i = cucartesianindex(f_fft)
-#	@cuprintf("threadIdx = (%1d,%1d,%1d)\n", i[1], i[2], i[3])
     if checkbounds(Bool, f_fft, i)
         c1 = f2_fft[i]' * thetam_fft[i]
         c2 = thetaf_fft[i]' * m2_fft[i]
@@ -66,7 +63,6 @@ function kernel_calcNumDenom_pixels!(f_fft::T, f2_fft::T, thetaf_fft::T,
                                         m_fft::T, m2_fft::T, thetam_fft::T,
                                         numerator_fft::T, denominator_fft::T) where T
     i = cucartesianindex(f_fft)
-#	@cuprintf("threadIdx = (%1d,%1d,%1d)\n", i[1], i[2], i[3])
     if checkbounds(Bool, f_fft, i)
          c1 = -2 * f_fft[i]'
          c1 = c1 * m_fft[i]
@@ -75,28 +71,6 @@ function kernel_calcNumDenom_pixels!(f_fft::T, f2_fft::T, thetaf_fft::T,
          c2 = f2_fft[i]' * thetam_fft[i]
          numerator_fft[i] = c1 + c2;
          denominator_fft[i] = thetaf_fft[i]' * thetam_fft[i]
-    end
-    return nothing
-end
-
-# Frequency-domain fftshift
-# Run this before you ifft
-function kernel_fdshift!(data1fft::T, data2fft::T, shift1::R, shift2::R, shift3::R,
-                        N1::Int, normalize::Int) where {T, R}
-    Tc = eltype(T)
-    Tr = eltype(R)
-    i = cucartesianindex(data1fft)
-    N = length(i)
-#	@cuprintf("threadIdx = (%1d,%1d,%1d)\n", i[1], i[2], i[3])
-    tau = Tr(6.283185307179586)
-    sz = size(data1fft)
-    if checkbounds(Bool, data1fft, i)
-        arg = Tr((tau*shift1)/N1*i[1])
-        N > 1 ? arg = arg + Tr((tau*shift2)/sz[2]*i[2]) : nothing
-        N > 2 ? arg = arg + Tr((tau*shift3)/sz[3]*i[3]) : nothing
-        phase = Tc(CUDAnative.cos(arg),CUDAnative.sin(arg))/normalize
-        data1fft[i] = data1fft[i] * phase
-        data2fft[i] = data2fft[i] * phase
     end
     return nothing
 end
