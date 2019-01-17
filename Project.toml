@@ -1,0 +1,23 @@
+name = "RegisterMismatchCuda"
+uuid = "ee0d8d85-fa18-576c-9601-66ebb12862d9"
+authors = ["Tim Holy <tim.holy@gmail.com>"]
+
+[deps]
+CUDAdrv = "c5f51814-7f29-56b8-a69c-e4d8f6be1fde"
+CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17"
+CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
+Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+Primes = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
+RegisterCore = "67712758-55e7-5c3c-8e85-dda1d7758434"
+RegisterMismatchCommon = "abb2e897-52bf-5d28-a379-6ca321e3b878"
+SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+
+[compat]
+julia = "1.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+CenterIndexedArrays = "46a7138f-0d70-54e1-8ada-fb8296f91f24"
+
+[targets]
+test = ["Test", "CenterIndexedArrays"]

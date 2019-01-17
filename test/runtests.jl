@@ -1,57 +1,291 @@
-using Base.Test
-import CUDArt
-import BlockRegistration, RegisterMismatchCuda
-using RegisterCore
-
-function run_components(f, A)
-    G1 = CUDArt.CudaPitchedArray(A)
-    G0 = CUDArt.CudaPitchedArray(eltype(A), size(A))
-    G2 = CUDArt.CudaPitchedArray(eltype(A), size(A))
-    args = (pointer(G1), pointer(G2), pointer(G0), size(G1,1), size(G1,2), size(G1,3), CUDArt.pitchel(G1))
-    argtypes = ((typeof(x) for x in args)...)
-    CUDAdrv.cudacall(f, 1, (4,4), argtypes, args...)
-    A0, A1, A2 = CUDArt.to_host(G0), CUDArt.to_host(G1), CUDArt.to_host(G2)
+use_cuda = true
+if (isdefined(Main, :use_cuda) && Main.use_cuda==false)
+    error("use_cuda must be true")
 end
 
-img = rand(map(UInt8,0:255), 256, 256)
-rng = Any[1:240, 10:250]
-fixed = map(Float32, img[rng...])
-moving = map(Float32, img[rng[1]+13, rng[2]-8])
+using Test, Images
+using CuArrays, CUDAdrv, CUDAnative, RegisterCore, CenterIndexedArrays
+#using RegisterUtilities
+import RegisterMismatchCuda
+RM = RegisterMismatchCuda
 
-CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
-#     CuModule("../register_mismatch_cuda.ptx") do md
-    RegisterMismatchCuda.init(devlist)
-    try
-        f = RegisterMismatchCuda.ptxdict[(devlist[1], "components_func", Float64)]
-        CUDArt.device(devlist[1])
-        A = [1 2; NaN 4]
-        B = [NaN NaN; 5 NaN]
-        A0, A1, A2 = run_components(f, A)
-        @test A0 == .!isnan.(A)
-        @test A1 == [1 2; 0 4]
-        @test A2 == [1 4; 0 16]
-        B0, B1, B2 = run_components(f, B)
-        @test B0 == .!isnan.(B)
-        @test B1 == [0 0; 5 0]
-        @test B2 == [0 0; 25 0]
-        A = zeros(5,5)
-        A[3,3] = 3
-        B = zeros(5,5)
-        B[4,5] = 3
-        maxshift = (2,3)
-        mm = RegisterMismatchCuda.mismatch(A, A, maxshift)
-        num, denom = RegisterMismatchCuda.separate(mm)
-        RegisterMismatchCuda.truncatenoise!(mm, 0.01)
-        @test indmin_mismatch(mm, 0.01) == CartesianIndex((0,0))
-        mm = RegisterMismatchCuda.mismatch(A, B, maxshift)
-        RegisterMismatchCuda.truncatenoise!(mm, 0.01)
-        @test indmin_mismatch(mm, 0.01) == CartesianIndex((1,2))
+accuracy = 1e-5
 
-        # Testing on more complex objects
-        maxshift = (20, 20)
-        mm = RegisterMismatchCuda.mismatch(fixed, moving, maxshift)
-        @test indmin_mismatch(mm, 0.01) == CartesianIndex((-13,8))
-    finally
-        RegisterMismatchCuda.close()
+devlist = CuDevice[]
+map(dev->capability(dev) >= v"2.0" ? push!(devlist,dev) : nothing, devices())
+if isempty(devlist)
+    error("There is no CUDA device having capability bigger than version 2.0.")
+end
+
+@testset "kernel_conv_components" begin
+    function run_components(A)
+        G1 = CuArray(A)
+        G0 = CuArray{eltype(A)}(undef, size(A))
+        G2 = CuArray{eltype(A)}(undef, size(A))
+        sz = size(A)
+        dev = device()
+        threadspb = RM.calculate_threads(sz, attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK))
+        nblocks = ceil.(Int, sz ./ threadspb)
+        @cuda blocks = nblocks threads = threadspb RM.kernel_conv_components!(G1, G2, G0)
+        A0, A1, A2 = Array(G0), Array(G1), Array(G2)
     end
+
+#    for dev in devlist
+#        device!(dev) do
+            try
+                A = [1 2; NaN 4]
+                B = [NaN NaN; 5 NaN]
+                A0, A1, A2 = run_components(A)
+                @test A0 == .!isnan.(A)
+                @test A1 == [1 2; 0 4]
+                @test A2 == [1 4; 0 16]
+                B0, B1, B2 = run_components(B)
+                @test B0 == .!isnan.(B)
+                @test B1 == [0 0; 5 0]
+                @test B2 == [0 0; 25 0]
+            finally
+            end
+#        end
+#    end
 end
+
+@testset "kernel_calcNumDenom" begin
+    function run_cpu(f::Function, f_fft, f2_fft, thetaf_fft, m_fft,m2_fft, thetam_fft)
+        numerator_fft = similar(f_fft)
+        denominator_fft = similar(f_fft)
+        for i in CartesianIndices(f_fft)
+            f(i, f_fft, f2_fft, thetaf_fft, m_fft,m2_fft, thetam_fft, numerator_fft, denominator_fft)
+        end
+        numerator_fft, denominator_fft
+    end
+
+    function run_gpu(kernel::Function, f_fft, f2_fft, thetaf_fft, m_fft,m2_fft, thetam_fft)
+        d_f = CuArray(f_fft)
+        d_f2 = CuArray(f2_fft)
+        d_tf = CuArray(thetaf_fft)
+        d_m = CuArray(m_fft)
+        d_m2 = CuArray(m2_fft)
+        d_tm = CuArray(thetam_fft)
+        d_numerator = similar(d_f)
+        d_denominator = similar(d_f)
+        sz = size(f_fft)
+        dev = device()
+        threadspb = RM.calculate_threads(sz, attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK))
+        nblocks = ceil.(Int, sz ./ threadspb)
+        args = (d_f, d_f2, d_tf, d_m, d_m2, d_tm, d_numerator, d_denominator)
+        @cuda blocks = nblocks threads = threadspb kernel(args...)
+        Array(d_numerator), Array(d_denominator)
+    end
+
+    function calcNumDenom_intensity!(i, f_fft, f2_fft, thetaf_fft, m_fft,m2_fft, thetam_fft, numerator_fft, denominator_fft)
+        if checkbounds(Bool, f_fft, i)
+            c1 = f2_fft[i]' * thetam_fft[i]
+            c2 = thetaf_fft[i]' * m2_fft[i]
+            c1 = c1 + c2
+            c2 = f_fft[i]' * m_fft[i]
+            c2 = 2 * c2
+            numerator_fft[i] = c1 - c2
+            denominator_fft[i] = c1
+        end
+    end
+
+    function calcNumDenom_pixels!(i, f_fft, f2_fft, thetaf_fft, m_fft,m2_fft, thetam_fft, numerator_fft, denominator_fft)
+        if checkbounds(Bool, f_fft, i)
+            c1 = -2 * f_fft[i]'
+            c1 = c1 * m_fft[i]
+            c2 = thetaf_fft[i]' * m2_fft[i]
+            c1 = c1 + c2
+            c2 = f2_fft[i]' * thetam_fft[i]
+            numerator_fft[i] = c1 + c2;
+            denominator_fft[i] = thetaf_fft[i]' * thetam_fft[i]
+        end
+    end
+
+#    for dev in devlist
+#        device!(dev) do
+            A = rand(Complex{Float64},3,3)
+            B = rand(Complex{Float64},3,3)
+            C = rand(Complex{Float64},3,3)
+            D = rand(Complex{Float64},3,3)
+            E = rand(Complex{Float64},3,3)
+            F = rand(Complex{Float64},3,3)
+            num_cpu, denom_cpu = run_cpu(calcNumDenom_intensity!,A,B,C,D,E,F)
+            num_gpu, denom_gpu = run_gpu(RM.kernel_calcNumDenom_intensity!,A,B,C,D,E,F)
+            @test ≈(num_cpu, num_gpu, atol=accuracy)
+            @test ≈(denom_cpu, denom_gpu, atol=accuracy)
+            num_cpu, denom_cpu = run_cpu(calcNumDenom_pixels!,A,B,C,D,E,F)
+            num_gpu, denom_gpu = run_gpu(RM.kernel_calcNumDenom_pixels!,A,B,C,D,E,F)
+            @test ≈(num_cpu, num_gpu, atol=accuracy)
+            @test ≈(denom_cpu, denom_gpu, atol=accuracy)
+#        end
+#    end
+end
+
+
+@testset "kernel_fdshift" begin
+    function run_cpu!(f::Function, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
+        for i in CartesianIndices(data1fft)
+            f(i, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
+        end
+    end
+
+    function run_gpu!(kernel::Function, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
+        d_d1 = CuArray(data1fft)
+        d_d2 = CuArray(data2fft)
+        sz = size(data1fft)
+        threadspb = RM.calculate_threads(sz, attribute(device(), CUDAdrv.MAX_THREADS_PER_BLOCK))
+        nblocks = ceil.(Int, sz ./ threadspb)
+        args = (d_d1, d_d2, shift1, shift2, shift3, N1, normalize)
+        @cuda blocks = nblocks threads = threadspb kernel(args...)
+        copyto!(data1fft, Array(d_d1))
+        copyto!(data2fft, Array(d_d2))
+    end
+
+    function fdshift!(i, data1fft, data2fft, shift1, shift2, shift3, N1, normalize)
+        Tc = eltype(data1fft)
+        Tr = eltype(shift1)
+        N = length(i)
+        tau = Tr(6.283185307179586)
+        sz = size(data1fft)
+        if checkbounds(Bool, data1fft, i)
+            arg = Tr((tau*shift1)/N1*i[1])
+            N > 1 ? arg = arg + Tr((tau*shift2)/sz[2]*i[2]) : nothing
+            N > 2 ? arg = arg + Tr((tau*shift3)/sz[3]*i[3]) : nothing
+            phase = Tc(cos(arg),sin(arg))/normalize
+            data1fft[i] = data1fft[i] * phase
+            data2fft[i] = data2fft[i] * phase
+        end
+    end
+
+#    for dev in devlist
+#        device!(dev) do
+            Ac = rand(Complex{Float64},3,3)
+            Bc = rand(Complex{Float64},3,3)
+            Ag = copy(Ac)
+            Bg = copy(Bc)
+            shift1 = convert(Float64,-1)
+            shift2 = convert(Float64,-2)
+            shift3 = convert(Float64,0)
+            N1 = (size(Ac,1)-1)*2
+            normalize = length(Ac)
+            run_cpu!(fdshift!,Ac,Bc,shift1,shift2,shift3,N1,normalize)
+            run_gpu!(RM.kernel_fdshift!,Ag,Bg,shift1,shift2,shift3,N1,normalize)
+            @test ≈(Ac, Ag, atol=accuracy)
+            @test ≈(Bc, Bg, atol=accuracy)
+#        end
+#    end
+end
+
+@testset "Mismatch 2D test" begin
+#    for dev in devlist
+#        device!(dev) do
+            A = zeros(5,5)
+            A[3,3] = 3
+            B = zeros(5,5)
+            B[4,5] = 3
+            maxshift = (2,3)
+            mm = RM.mismatch(A, A, maxshift)
+            num, denom = RM.separate(mm)
+            RM.truncatenoise!(mm, 0.01)
+            @test indmin_mismatch(mm, 0.01) == CartesianIndex((0,0))
+            mm = RM.mismatch(A, B, maxshift)
+            RM.truncatenoise!(mm, 0.01)
+            @test indmin_mismatch(mm, 0.01) == CartesianIndex((1,2))
+
+            # Testing on more complex objects
+            # img = rand(map(UInt8,0:255), 256, 256)
+            # rng = Any[1:240, 10:250]
+            # fixed = map(Float32, img[rng...])
+            # moving = map(Float32, img[rng[1].+13, rng[2].-8])
+            # maxshift = (20, 20)
+            img = rand(map(UInt8,0:255), 60, 60)
+            rng = Any[1:40, 10:50]
+            fixed = map(Float32, img[rng...])
+            moving = map(Float32, img[rng[1].+6, rng[2].-8])
+            maxshift = (10, 10)
+            mm = RM.mismatch(fixed, moving, maxshift)
+            @test indmin_mismatch(mm, 0.01) == CartesianIndex((-6,8))
+#        end
+#    end
+end
+
+@testset "Mismatch 3D test" begin
+#    for dev in devlist
+#        device!(dev) do
+           # Test 3d similarly
+            Apad = parent(Images.padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+            Bpad = parent(Images.padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+            mm = RM.mismatch(Apad, Bpad, [4,3,2])
+            num, denom = RegisterCore.separate(mm)
+            mmref = CenterIndexedArray(Float64, 9, 7, 5)
+            for k=-2:2, j = -3:3, i = -4:4
+                Bshift = circshift(Bpad,-[i,j,k])
+                df = Apad-Bshift
+                mmref[i,j,k] = sum(df.^2)
+            end
+            nrm = sum(Apad.^2)+sum(Bpad.^2)
+            @test ≈(mmref.data, num.data, atol=accuracy*nrm)
+            @test ≈(fill(nrm,size(denom)), denom.data, atol=accuracy*nrm)
+#        end
+#    end
+end
+
+@testset "Mismatch apertures 2D test" begin
+#    for dev in devlist
+#        device!(dev) do
+            for imsz in ((15,16),)#(14,17))
+                for maxshift in ([4,3],)#[3,2])
+                    for gridsize in ([3,3],)#([2,1], [2,3],[2,2],[1,3])
+                        Apad = parent(Images.padarray(reshape(1:prod(imsz), imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
+                        Bpad = parent(Images.padarray(rand(1:20, imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
+                        # intensity normalization
+                        mms = RM.mismatch_apertures(Float64, Apad, Bpad, gridsize, maxshift, normalization=:intensity, display=false)
+                        nums, denoms = RegisterCore.separate(mms)
+                        num = sum(nums)
+                        denom = sum(denoms)
+                        mm = CenterIndexedArray(Float64, 2maxshift.+1...)
+                        for j = -maxshift[2]:maxshift[2], i = -maxshift[1]:maxshift[1]
+                            Bshift = circshift(Bpad,-[i,j])
+                            df = Apad-Bshift
+                            mm[i,j] = sum(df.^2)
+                        end
+                        nrm = sum(Apad.^2)+sum(Bpad.^2)
+                        @test ≈(mm.data, num.data, atol=accuracy*nrm)
+                        @test ≈(fill(nrm,size(denom)), denom.data, atol=accuracy*nrm)
+                        # pixel normalization
+                        mms = RM.mismatch_apertures(Float64, Apad, Bpad, gridsize, maxshift, normalization=:pixels, display=false)
+                        _, denoms = RegisterCore.separate(mms)
+                        denom = sum(denoms)
+                        n = Vector{Int}[size(Apad,i).-abs.(-maxshift[i]:maxshift[i]) for i = 1:2]
+                        @test ≈(denom.data, n[1].*n[2]', atol=accuracy*maximum(denom))
+                    end
+                end
+            end
+#        end
+#    end
+end
+
+@testset "Mismatch apertures 3D test" begin
+#    for dev in devlist
+#        device!(dev) do
+           # Test 3d similarly
+            Apad = parent(Images.padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+            Bpad = parent(Images.padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+            mms = RM.mismatch_apertures(Apad, Bpad, (2,3,2),[4,3,2], normalization=:intensity, display=false)
+            nums, denoms = RegisterCore.separate(mms)
+            num = sum(nums)
+            denom = sum(denoms)
+            mmref = CenterIndexedArray(Float64, 9, 7, 5)
+            for k=-2:2, j = -3:3, i = -4:4
+                Bshift = circshift(Bpad,-[i,j,k])
+                df = Apad-Bshift
+                mmref[i,j,k] = sum(df.^2)
+            end
+            nrm = sum(Apad.^2)+sum(Bpad.^2)
+            @test ≈(mmref.data, num.data, atol=accuracy*nrm)
+            @test ≈(fill(sum(Apad.^2)+sum(Bpad.^2),size(denom)), denom.data, atol=accuracy*nrm)
+#        end
+#    end
+end
+
+nothing
