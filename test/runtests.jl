@@ -156,7 +156,7 @@ end
            # Test 3d similarly
             Apad = parent(Images.padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
             Bpad = parent(Images.padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
-            mm = RM.mismatch(Apad, Bpad, [4,3,2])
+            mm = RM.mismatch(Apad, Bpad, (4,3,2))
             num, denom = RegisterCore.separate(mm)
             mmref = CenterIndexedArray(Float64, 9, 7, 5)
             for k=-2:2, j = -3:3, i = -4:4
@@ -174,9 +174,9 @@ end
 @testset "Mismatch apertures 2D test" begin
 #    for dev in devlist
 #        device!(dev) do
-            for imsz in ((15,16),)#(14,17))
-                for maxshift in ([4,3],)#[3,2])
-                    for gridsize in ([3,3],)#([2,1], [2,3],[2,2],[1,3])
+            for imsz in ((15,16), (14,17))
+                for maxshift in ((4,3), (3,2))
+                    for gridsize in ((3,3), (2,1), (2,3), (2,2), (1,3))
                         Apad = parent(Images.padarray(reshape(1:prod(imsz), imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
                         Bpad = parent(Images.padarray(rand(1:20, imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
                         # intensity normalization
@@ -184,7 +184,7 @@ end
                         nums, denoms = RegisterCore.separate(mms)
                         num = sum(nums)
                         denom = sum(denoms)
-                        mm = CenterIndexedArray(Float64, 2maxshift.+1...)
+                        mm = CenterIndexedArray(Float64, (2 .* maxshift .+ 1)...)
                         for j = -maxshift[2]:maxshift[2], i = -maxshift[1]:maxshift[1]
                             Bshift = circshift(Bpad,-[i,j])
                             df = Apad-Bshift
@@ -212,7 +212,7 @@ end
            # Test 3d similarly
             Apad = parent(Images.padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
             Bpad = parent(Images.padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
-            mms = RM.mismatch_apertures(Apad, Bpad, (2,3,2),[4,3,2], normalization=:intensity, display=false)
+            mms = RM.mismatch_apertures(Apad, Bpad, (2,3,2), (4,3,2), normalization=:intensity, display=false)
             nums, denoms = RegisterCore.separate(mms)
             num = sum(nums)
             denom = sum(denoms)
