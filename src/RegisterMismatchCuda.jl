@@ -1,10 +1,10 @@
 module RegisterMismatchCuda
 
-using SharedArrays, Primes, Images, CuArrays, CUDAdrv, CUDAnative
+using SharedArrays, Primes, ImageCore, CuArrays, CUDAdrv, CUDAnative
 using RegisterCore, RegisterMismatchCommon
 using CuArrays.CUFFT
 import Base: eltype, ndims
-import Images: sdims, coords_spatial, data
+import ImageCore: sdims, coords_spatial
 import RegisterMismatchCommon: mismatch, mismatch_apertures, mismatch0
 
 export

@@ -1,4 +1,4 @@
-using Test, Images
+using Test, ImageCore, ImageFiltering
 using CuArrays, CUDAdrv, CUDAnative, RegisterCore, CenterIndexedArrays
 import RegisterMismatchCuda
 RM = RegisterMismatchCuda
