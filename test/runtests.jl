@@ -1,4 +1,4 @@
-using Test, Images
+using Test, ImageCore, ImageFiltering
 using CuArrays, CUDAdrv, CUDAnative, RegisterCore, CenterIndexedArrays
 import RegisterMismatchCuda
 RM = RegisterMismatchCuda
@@ -25,8 +25,8 @@ end
         A0, A1, A2 = Array(G0), Array(G1), Array(G2)
     end
 
-#    for dev in devlist
-#        device!(dev) do
+    for dev in devlist
+        device!(dev) do
             try
                 A = [1 2; NaN 4]
                 B = [NaN NaN; 5 NaN]
@@ -40,8 +40,8 @@ end
                 @test B2 == [0 0; 25 0]
             finally
             end
-#        end
-#    end
+        end
+    end
 end
 
 @testset "kernel_calcNumDenom" begin
@@ -97,8 +97,8 @@ end
         end
     end
 
-#    for dev in devlist
-#        device!(dev) do
+    for dev in devlist
+        device!(dev) do
             A = rand(Complex{Float64},3,3)
             B = rand(Complex{Float64},3,3)
             C = rand(Complex{Float64},3,3)
@@ -113,13 +113,13 @@ end
             num_gpu, denom_gpu = run_gpu(RM.kernel_calcNumDenom_pixels!,A,B,C,D,E,F)
             @test ≈(num_cpu, num_gpu, atol=accuracy)
             @test ≈(denom_cpu, denom_gpu, atol=accuracy)
-#        end
-#    end
+        end
+    end
 end
 
 @testset "Mismatch 2D test" begin
-#    for dev in devlist
-#        device!(dev) do
+    for dev in devlist
+        device!(dev) do
             A = zeros(5,5)
             A[3,3] = 3
             B = zeros(5,5)
@@ -146,19 +146,19 @@ end
             maxshift = (10, 10)
             mm = RM.mismatch(fixed, moving, maxshift)
             @test indmin_mismatch(mm, 0.01) == CartesianIndex((-6,8))
-#        end
-#    end
+        end
+    end
 end
 
 @testset "Mismatch 3D test" begin
-#    for dev in devlist
-#        device!(dev) do
-           # Test 3d similarly
-            Apad = parent(Images.padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
-            Bpad = parent(Images.padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+    for dev in devlist
+        device!(dev) do
+            # Test 3d similarly
+            Apad = parent(padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+            Bpad = parent(padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
             mm = RM.mismatch(Apad, Bpad, (4,3,2))
             num, denom = RegisterCore.separate(mm)
-            mmref = CenterIndexedArray(Float64, 9, 7, 5)
+            mmref = CenterIndexedArray{Float64}(undef, 9, 7, 5)
             for k=-2:2, j = -3:3, i = -4:4
                 Bshift = circshift(Bpad,-[i,j,k])
                 df = Apad-Bshift
@@ -167,24 +167,24 @@ end
             nrm = sum(Apad.^2)+sum(Bpad.^2)
             @test ≈(mmref.data, num.data, atol=accuracy*nrm)
             @test ≈(fill(nrm,size(denom)), denom.data, atol=accuracy*nrm)
-#        end
-#    end
+        end
+    end
 end
 
 @testset "Mismatch apertures 2D test" begin
-#    for dev in devlist
-#        device!(dev) do
+    for dev in devlist
+        device!(dev) do
             for imsz in ((15,16), (14,17))
                 for maxshift in ((4,3), (3,2))
                     for gridsize in ((3,3), (2,1), (2,3), (2,2), (1,3))
-                        Apad = parent(Images.padarray(reshape(1:prod(imsz), imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
-                        Bpad = parent(Images.padarray(rand(1:20, imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
+                        Apad = parent(padarray(reshape(1:prod(imsz), imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
+                        Bpad = parent(padarray(rand(1:20, imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
                         # intensity normalization
                         mms = RM.mismatch_apertures(Float64, Apad, Bpad, gridsize, maxshift, normalization=:intensity, display=false)
                         nums, denoms = RegisterCore.separate(mms)
                         num = sum(nums)
                         denom = sum(denoms)
-                        mm = CenterIndexedArray(Float64, (2 .* maxshift .+ 1)...)
+                        mm = CenterIndexedArray{Float64}(undef, (2 .* maxshift .+ 1)...)
                         for j = -maxshift[2]:maxshift[2], i = -maxshift[1]:maxshift[1]
                             Bshift = circshift(Bpad,-[i,j])
                             df = Apad-Bshift
@@ -202,21 +202,21 @@ end
                     end
                 end
             end
-#        end
-#    end
+        end
+    end
 end
 
 @testset "Mismatch apertures 3D test" begin
-#    for dev in devlist
-#        device!(dev) do
-           # Test 3d similarly
-            Apad = parent(Images.padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
-            Bpad = parent(Images.padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+    for dev in devlist
+        device!(dev) do
+            # Test 3d similarly
+            Apad = parent(padarray(reshape(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
+            Bpad = parent(padarray(rand(1:80*6, 10, 8, 6), Fill(0, (4,3,2))))
             mms = RM.mismatch_apertures(Apad, Bpad, (2,3,2), (4,3,2), normalization=:intensity, display=false)
             nums, denoms = RegisterCore.separate(mms)
             num = sum(nums)
             denom = sum(denoms)
-            mmref = CenterIndexedArray(Float64, 9, 7, 5)
+            mmref = CenterIndexedArray{Float64}(undef, 9, 7, 5)
             for k=-2:2, j = -3:3, i = -4:4
                 Bshift = circshift(Bpad,-[i,j,k])
                 df = Apad-Bshift
@@ -225,8 +225,6 @@ end
             nrm = sum(Apad.^2)+sum(Bpad.^2)
             @test ≈(mmref.data, num.data, atol=accuracy*nrm)
             @test ≈(fill(sum(Apad.^2)+sum(Bpad.^2),size(denom)), denom.data, atol=accuracy*nrm)
-#        end
-#    end
+        end
+    end
 end
-
-nothing
