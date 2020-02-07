@@ -117,7 +117,7 @@ CMStorage{T}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N};
 CMStorage{T,N}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N}; display=false) where {T<:Real,N} = CMStorage{T,N}(undef, blocksize, maxshift)
 
 context(cms::CMStorage) = context(cms.num.C)
-context(a::CuArray) = a.buf.ctx
+context(a::CuArray) = a.ctx
 
 eltype(cms::CMStorage{T,N}) where {T,N} = T
  ndims(cms::CMStorage{T,N}) where {T,N} = N
@@ -237,7 +237,7 @@ function fillfixed!(cms::CMStorage{T}, fixed::CuArray; f_indexes = ntuple(i->1:s
     end
     copyto!(paddedf, tuple(dstindexes...), fixed, tuple(srcindexes...))
     # Prepare the components of the convolution
-    threadspb = calculate_threads(size(paddedf), attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK)÷2)
+    threadspb = calculate_threads(size(paddedf), attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
     nblocks = ceil.(Int, size(paddedf)./ threadspb)
     @cuda blocks = nblocks threads = threadspb kernel_conv_components!(paddedf, cms.fixed.I2.R, cms.fixed.I0.R)
     synchronize()
@@ -264,7 +264,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     paddedm = cms.moving.I1.R
     get!(paddedm, moving, ntuple(d->cms.getindexes[d].+m_offset[d], nd), T(NaN))
     # Prepare the components of the convolution
-    threadspb = calculate_threads(size(paddedm), attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK)÷2)
+    threadspb = calculate_threads(size(paddedm), attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
     nblocks = ceil.(Int, size(paddedm)./ threadspb)
     @cuda blocks = nblocks threads = threadspb kernel_conv_components!(paddedm, cms.moving.I2.R, cms.moving.I0.R)
     synchronize()
@@ -279,7 +279,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     args = (cms.fixed.I1.C,  cms.fixed.I2.C,  cms.fixed.I0.C,
             cms.moving.I1.C, cms.moving.I2.C, cms.moving.I0.C,
             cms.num.C, cms.denom.C)
-    threadspb = calculate_threads(size(d_numC), attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK)÷2)
+    threadspb = calculate_threads(size(d_numC), attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
     nblocks = ceil.(Int, size(d_numC)./ threadspb)
     if normalization == :intensity
         @cuda blocks = nblocks threads = threadspb kernel_calcNumDenom_intensity!(args...)
