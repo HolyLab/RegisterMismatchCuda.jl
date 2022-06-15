@@ -177,7 +177,6 @@ end
             for imsz in ((15,16), (14,17))
                 for maxshift in ((4,3), (3,2))
                     for gridsize in ((3,3), (2,1), (2,3), (2,2), (1,3))
-                        @show imsz, maxshift, gridsize
                         Apad = parent(padarray(reshape(1:prod(imsz), imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
                         Bpad = parent(padarray(rand(1:20, imsz[1], imsz[2]), Fill(0, maxshift, maxshift)))
                         # intensity normalization

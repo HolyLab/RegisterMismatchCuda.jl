@@ -117,7 +117,6 @@ CMStorage{T}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N};
 CMStorage{T,N}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N}; display=false) where {T<:Real,N} = CMStorage{T,N}(undef, blocksize, maxshift)
 
 CUDA.context(cms::CMStorage) = context(cms.num.C)
-# context(a::CuArray) = a.ctx #deprecated
 
 eltype(cms::CMStorage{T,N}) where {T,N} = T
  ndims(cms::CMStorage{T,N}) where {T,N} = N
