@@ -1,5 +1,5 @@
 using Test, ImageCore, ImageFiltering
-using CuArrays, CUDAdrv, CUDAnative, RegisterCore, CenterIndexedArrays
+using CUDA, RegisterCore, CenterIndexedArrays
 import RegisterMismatchCuda
 RM = RegisterMismatchCuda
 
@@ -18,7 +18,7 @@ end
         G2 = CuArray{eltype(A)}(undef, size(A))
         sz = size(A)
         dev = device()
-        threadspb = RM.calculate_threads(sz, attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
+        threadspb = RM.calculate_threads(sz, attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
         nblocks = ceil.(Int, sz ./ threadspb)
         @cuda blocks = nblocks threads = threadspb RM.kernel_conv_components!(G1, G2, G0)
         synchronize()
@@ -65,7 +65,7 @@ end
         d_denominator = similar(d_f)
         sz = size(f_fft)
         dev = device()
-        threadspb = RM.calculate_threads(sz, attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
+        threadspb = RM.calculate_threads(sz, attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
         nblocks = ceil.(Int, sz ./ threadspb)
         args = (d_f, d_f2, d_tf, d_m, d_m2, d_tm, d_numerator, d_denominator)
         @cuda blocks = nblocks threads = threadspb kernel(args...)

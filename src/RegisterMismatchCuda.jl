@@ -1,8 +1,8 @@
 module RegisterMismatchCuda
 
-using SharedArrays, Primes, ImageCore, CuArrays, CUDAdrv, CUDAnative
+using SharedArrays, Primes, ImageCore, CUDA
 using RegisterCore, RegisterMismatchCommon
-using CuArrays.CUFFT
+using CUDA: CUFFT, context
 import Base: eltype, ndims
 import ImageCore: sdims, coords_spatial
 import RegisterMismatchCommon: mismatch, mismatch_apertures, mismatch0
@@ -116,8 +116,7 @@ CMStorage{T}(::UndefInitializer, aperture_width::NTuple{N,<:Real}, maxshift::Dim
 CMStorage{T}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N}; display=false) where {T<:Real,N} = CMStorage{T}(undef, blocksize, maxshift)
 CMStorage{T,N}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N}; display=false) where {T<:Real,N} = CMStorage{T,N}(undef, blocksize, maxshift)
 
-context(cms::CMStorage) = context(cms.num.C)
-context(a::CuArray) = a.ctx
+CUDA.context(cms::CMStorage) = context(cms.num.C)
 
 eltype(cms::CMStorage{T,N}) where {T,N} = T
  ndims(cms::CMStorage{T,N}) where {T,N} = N
@@ -235,9 +234,9 @@ function fillfixed!(cms::CMStorage{T}, fixed::CuArray; f_indexes = ntuple(i->1:s
         srcindexes[idim] = tmp[i1]:tmp[i2]
         dstindexes[idim] = cms.setindexes[idim][i1]:cms.setindexes[idim][i2]
     end
-    copyto!(paddedf, tuple(dstindexes...), fixed, tuple(srcindexes...))
+    copyto!(paddedf, CartesianIndices(Tuple(dstindexes)), fixed, CartesianIndices(Tuple(srcindexes))) #This conversion may be inefficient.
     # Prepare the components of the convolution
-    threadspb = calculate_threads(size(paddedf), attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
+    threadspb = calculate_threads(size(paddedf), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
     nblocks = ceil.(Int, size(paddedf)./ threadspb)
     @cuda blocks = nblocks threads = threadspb kernel_conv_components!(paddedf, cms.fixed.I2.R, cms.fixed.I0.R)
     synchronize()
@@ -264,7 +263,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     paddedm = cms.moving.I1.R
     get!(paddedm, moving, ntuple(d->cms.getindexes[d].+m_offset[d], nd), T(NaN))
     # Prepare the components of the convolution
-    threadspb = calculate_threads(size(paddedm), attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
+    threadspb = calculate_threads(size(paddedm), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
     nblocks = ceil.(Int, size(paddedm)./ threadspb)
     @cuda blocks = nblocks threads = threadspb kernel_conv_components!(paddedm, cms.moving.I2.R, cms.moving.I0.R)
     synchronize()
@@ -279,7 +278,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     args = (cms.fixed.I1.C,  cms.fixed.I2.C,  cms.fixed.I0.C,
             cms.moving.I1.C, cms.moving.I2.C, cms.moving.I0.C,
             cms.num.C, cms.denom.C)
-    threadspb = calculate_threads(size(d_numC), attribute(dev, CUDAdrv.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
+    threadspb = calculate_threads(size(d_numC), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
     nblocks = ceil.(Int, size(d_numC)./ threadspb)
     if normalization == :intensity
         @cuda blocks = nblocks threads = threadspb kernel_calcNumDenom_intensity!(args...)
@@ -293,7 +292,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     # Compute the IFFTs
     d_num = cms.num.R
     d_denom = cms.denom.R
-    rng = cms.num.rng
+    rng = CartesianIndices(cms.num.rng);
     copyto!(d_num, rng, cms.ifftfunc * d_numC, rng)
     copyto!(d_denom, rng, cms.ifftfunc * d_denomC, rng)
     # Copy result to host
