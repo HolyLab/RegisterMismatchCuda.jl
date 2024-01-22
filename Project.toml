@@ -1,7 +1,7 @@
 name = "RegisterMismatchCuda"
 uuid = "ee0d8d85-fa18-576c-9601-66ebb12862d9"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.3.2"
+version = "0.3.3"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
