@@ -1,7 +1,7 @@
 name = "RegisterMismatchCuda"
 uuid = "ee0d8d85-fa18-576c-9601-66ebb12862d9"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.3.3"
+version = "0.3.4"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -12,7 +12,7 @@ RegisterMismatchCommon = "abb2e897-52bf-5d28-a379-6ca321e3b878"
 SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 
 [compat]
-CUDA = "3"
+CUDA = "3,4,5"
 ImageCore = "0.8.1, 0.9, 0.10"
 Primes = "0.4, 0.5"
 RegisterCore = "0.2"
