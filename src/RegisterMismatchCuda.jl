@@ -56,8 +56,8 @@ function CuRCpair{T}(::UndefInitializer, realsize::Dims{N}) where {T <: Abstract
 end
 
 function CuRCpair(A::Array{T}) where {T <: AbstractFloat}
-    P = CuRCpair(eltype(A), size(A))
-    copyto!(P.R, A)
+    P = CuRCpair{T}(undef, size(A))
+    copyto!(view(P.R, P.rng...), A)
     return P
 end
 
@@ -291,7 +291,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     elseif normalization == :pixels
         @cuda blocks = nblocks threads = threadspb kernel_calcNumDenom_pixels!(args...)
     else
-        throw(ArgumentError("normalizeby=$(normalizeby) not recognized"))
+        throw(ArgumentError("normalization=$(normalization) not recognized"))
     end
     synchronize()
 

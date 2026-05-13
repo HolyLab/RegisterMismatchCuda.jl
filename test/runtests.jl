@@ -156,12 +156,12 @@ end
             B[4, 5] = 3
             maxshift = (2, 3)
             mm = RM.mismatch(A, A, maxshift)
-            num, denom = RM.separate(mm)
-            RM.truncatenoise!(mm, 0.01)
-            @test argmin_mismatch(mm, 0.01) == CartesianIndex((0, 0))
+            num, denom = RegisterCore.separate(mm)
+            RegisterMismatchCommon.truncatenoise!(mm, 0.01)
+            @test RegisterCore.indmin_mismatch(mm, 0.01) == CartesianIndex((0, 0))
             mm = RM.mismatch(A, B, maxshift)
-            RM.truncatenoise!(mm, 0.01)
-            @test argmin_mismatch(mm, 0.01) == CartesianIndex((1, 2))
+            RegisterMismatchCommon.truncatenoise!(mm, 0.01)
+            @test RegisterCore.indmin_mismatch(mm, 0.01) == CartesianIndex((1, 2))
 
             # Testing on more complex objects
             # img = rand(map(UInt8,0:255), 256, 256)
@@ -175,7 +175,7 @@ end
             moving = map(Float32, img[rng[1] .+ 6, rng[2] .- 8])
             maxshift = (10, 10)
             mm = RM.mismatch(fixed, moving, maxshift)
-            @test argmin_mismatch(mm, 0.01) == CartesianIndex((-6, 8))
+            @test RegisterCore.indmin_mismatch(mm, 0.01) == CartesianIndex((-6, 8))
         end
     end
 end
@@ -255,6 +255,38 @@ end
             nrm = sum(Apad .^ 2) + sum(Bpad .^ 2)
             @test ≈(mmref.data, num.data, atol = accuracy * nrm)
             @test ≈(fill(sum(Apad .^ 2) + sum(Bpad .^ 2), size(denom)), denom.data, atol = accuracy * nrm)
+        end
+    end
+end
+
+@testset "CuRCpair from Array" begin
+    for dev in devlist
+        device!(dev) do
+            A = rand(Float32, 8, 8)
+            P = RM.CuRCpair(A)
+            @test Array(P.R[P.rng...]) ≈ A
+        end
+    end
+end
+
+@testset "CMStorage accessors" begin
+    for dev in devlist
+        device!(dev) do
+            cms = RM.CMStorage{Float32}(undef, (8, 8), (2, 2))
+            @test eltype(cms) == Float32
+            @test ndims(cms) == 2
+        end
+    end
+end
+
+@testset "mismatch! invalid normalization" begin
+    for dev in devlist
+        device!(dev) do
+            A = CuArray(rand(Float32, 8, 8))
+            cms = RM.CMStorage{Float32}(undef, size(A), (2, 2))
+            mm = RegisterCore.MismatchArray(Float32, 5, 5)
+            RM.fillfixed!(cms, A)
+            @test_throws ArgumentError RM.mismatch!(mm, cms, A; normalization = :bad)
         end
     end
 end
