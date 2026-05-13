@@ -329,16 +329,4 @@ function assertsamesize(A::AbstractArray, B::AbstractArray)
     return size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) && size(A, 3) == size(B, 3) || error("Arrays are not the same size")
 end
 
-### Deprecations
-
-@deprecate CuRCpair(realtype::Type{T}, realsize) where {T <: AbstractFloat} CuRCpair{T}(undef, realsize)
-
-function CMStorage{T}(::UndefInitializer, aperture_width::WidthLike, maxshift::DimsLike; kwargs...) where {T <: Real}
-    Base.depwarn("CMStorage with aperture_width::$(typeof(aperture_width)) and maxshift::$(typeof(maxshift)) is deprecated, use tuples instead", :CMStorage)
-    (N = length(aperture_width)) == length(maxshift) || error("Dimensionality mismatch")
-    return CMStorage{T, N}(undef, (aperture_width...,), (maxshift...,); kwargs...)
-end
-
-@deprecate CMStorage(::Type{T}, aperture_width::WidthLike, maxshift::DimsLike; kwargs...) where {T <: AbstractFloat}  CMStorage{T}(undef, aperture_width, maxshift; kwargs...)
-
 end # module
