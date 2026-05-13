@@ -134,10 +134,10 @@ end
             mm = RM.mismatch(A, A, maxshift)
             num, denom = RM.separate(mm)
             RM.truncatenoise!(mm, 0.01)
-            @test indmin_mismatch(mm, 0.01) == CartesianIndex((0, 0))
+            @test argmin_mismatch(mm, 0.01) == CartesianIndex((0, 0))
             mm = RM.mismatch(A, B, maxshift)
             RM.truncatenoise!(mm, 0.01)
-            @test indmin_mismatch(mm, 0.01) == CartesianIndex((1, 2))
+            @test argmin_mismatch(mm, 0.01) == CartesianIndex((1, 2))
 
             # Testing on more complex objects
             # img = rand(map(UInt8,0:255), 256, 256)
@@ -151,7 +151,7 @@ end
             moving = map(Float32, img[rng[1] .+ 6, rng[2] .- 8])
             maxshift = (10, 10)
             mm = RM.mismatch(fixed, moving, maxshift)
-            @test indmin_mismatch(mm, 0.01) == CartesianIndex((-6, 8))
+            @test argmin_mismatch(mm, 0.01) == CartesianIndex((-6, 8))
         end
     end
 end
