@@ -39,7 +39,7 @@ The major types and functions exported are:
 """
 RegisterMismatchCuda
 
-mutable struct CuRCpair{T <: AbstractFloat, N}
+struct CuRCpair{T <: AbstractFloat, N}
     R::CuArray{T, N}
     C::CuArray{Complex{T}, N}
     rng::NTuple{N}
@@ -67,7 +67,7 @@ function plan_fft_pair(P::CuRCpair{T, N}) where {T, N}
     return fwd, inv
 end
 
-mutable struct NanCorrFFTs{T <: AbstractFloat, N}
+struct NanCorrFFTs{T <: AbstractFloat, N}
     I0::CuRCpair{T, N}
     I1::CuRCpair{T, N}
     I2::CuRCpair{T, N}
@@ -79,7 +79,7 @@ end
 Prepare for FFT-based mismatch computations over domains of size `aperture_width`, computing the
 mismatch up to shifts of size `maxshift`.
 """
-mutable struct CMStorage{T <: AbstractFloat, N}
+struct CMStorage{T <: AbstractFloat, N}
     aperture_width::Vector{Float64}
     maxshift::Vector{Int}
     getindexes::Vector{UnitRange{Int}}   # indexes for pulling padded data, in source-coordinates
