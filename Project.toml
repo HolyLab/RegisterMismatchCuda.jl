@@ -1,6 +1,6 @@
 name = "RegisterMismatchCuda"
 uuid = "ee0d8d85-fa18-576c-9601-66ebb12862d9"
-version = "0.3.4"
+version = "1.0.0"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
 
 [deps]
@@ -14,7 +14,7 @@ SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 [compat]
 Aqua = "0.8"
 CUDA = "3,4,5"
-CenterIndexedArrays = "0.2"
+CenterIndexedArrays = "0.2, 1"
 ExplicitImports = "1"
 ImageCore = "0.8.1, 0.9, 0.10"
 ImageFiltering = "0.7"
