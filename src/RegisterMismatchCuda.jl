@@ -35,38 +35,38 @@ The major types and functions exported are:
 """
 RegisterMismatchCuda
 
-mutable struct CuRCpair{T<:AbstractFloat,N}
-    R::CuArray{T,N}
-    C::CuArray{Complex{T},N}
+mutable struct CuRCpair{T <: AbstractFloat, N}
+    R::CuArray{T, N}
+    C::CuArray{Complex{T}, N}
     rng::NTuple{N}
 end
 
-function CuRCpair{T}(::UndefInitializer, realsize::Dims{N}) where {T<:AbstractFloat,N}
+function CuRCpair{T}(::UndefInitializer, realsize::Dims{N}) where {T <: AbstractFloat, N}
     csize = [realsize...]
-    csize[1] = realsize[1]>>1 + 1
-    C = CuArray{Complex{T},N}(undef, csize...)
+    csize[1] = realsize[1] >> 1 + 1
+    C = CuArray{Complex{T}, N}(undef, csize...)
     csize[1] *= 2
     R = reshape(reinterpret(T, vec(C)), (csize...,)::Dims{N})
-    rng = map(n->1:n,realsize)
-    CuRCpair{T,N}(R, C, rng)
+    rng = map(n -> 1:n, realsize)
+    return CuRCpair{T, N}(R, C, rng)
 end
 
-function CuRCpair(A::Array{T}) where {T<:AbstractFloat}
+function CuRCpair(A::Array{T}) where {T <: AbstractFloat}
     P = CuRCpair(eltype(A), size(A))
     copyto!(P.R, A)
-    P
+    return P
 end
 
-function plan_fft_pair(P::CuRCpair{T,N}) where {T,N}
+function plan_fft_pair(P::CuRCpair{T, N}) where {T, N}
     fwd = CUFFT.plan_rfft(P.R[P.rng...])
     inv = CUFFT.plan_inv(fwd)
-    fwd, inv
+    return fwd, inv
 end
 
-mutable struct NanCorrFFTs{T<:AbstractFloat,N}
-    I0::CuRCpair{T,N}
-    I1::CuRCpair{T,N}
-    I2::CuRCpair{T,N}
+mutable struct NanCorrFFTs{T <: AbstractFloat, N}
+    I0::CuRCpair{T, N}
+    I1::CuRCpair{T, N}
+    I2::CuRCpair{T, N}
 end
 
 """
@@ -75,51 +75,51 @@ end
 Prepare for FFT-based mismatch computations over domains of size `aperture_width`, computing the
 mismatch up to shifts of size `maxshift`.
 """
-mutable struct CMStorage{T<:AbstractFloat,N}
+mutable struct CMStorage{T <: AbstractFloat, N}
     aperture_width::Vector{Float64}
     maxshift::Vector{Int}
     getindexes::Vector{UnitRange{Int}}   # indexes for pulling padded data, in source-coordinates
     setindexes::Vector{UnitRange{Int}}   # indexes for pushing fixed data, in source-coordinates
-    fixed::NanCorrFFTs{T,N}
-    moving::NanCorrFFTs{T,N}
-    num::CuRCpair{T,N}
-    denom::CuRCpair{T,N}
-    numhost::Array{T,N}
-    denomhost::Array{T,N}
+    fixed::NanCorrFFTs{T, N}
+    moving::NanCorrFFTs{T, N}
+    num::CuRCpair{T, N}
+    denom::CuRCpair{T, N}
+    numhost::Array{T, N}
+    denomhost::Array{T, N}
     # the next two store the result of calling plan_fft! and plan_ifft!
     fftfunc::Any
     ifftfunc::Any
     shiftindices::Vector{Vector{Int}} # indices for performing fftshift & snipping from -maxshift:maxshift
 end
 
-function CMStorage{T,N}(::UndefInitializer, aperture_width::NTuple{N,<:Real}, maxshift::Dims{N}) where {T<:AbstractFloat,N}
-    blocksize = map(x->ceil(Int,x), aperture_width)
+function CMStorage{T, N}(::UndefInitializer, aperture_width::NTuple{N, <:Real}, maxshift::Dims{N}) where {T <: AbstractFloat, N}
+    blocksize = map(x -> ceil(Int, x), aperture_width)
     padsz = padsize(blocksize, maxshift)
     getindexes = padranges(blocksize, maxshift)
-    setindexes = UnitRange{Int}[(1:blocksize[i]).+maxshift[i] for i = 1:length(blocksize)]
-    fixed  = NanCorrFFTs(CuRCpair{T}(undef, padsz), CuRCpair{T}(undef, padsz), CuRCpair{T}(undef, padsz))
+    setindexes = UnitRange{Int}[(1:blocksize[i]) .+ maxshift[i] for i in 1:length(blocksize)]
+    fixed = NanCorrFFTs(CuRCpair{T}(undef, padsz), CuRCpair{T}(undef, padsz), CuRCpair{T}(undef, padsz))
     moving = NanCorrFFTs(CuRCpair{T}(undef, padsz), CuRCpair{T}(undef, padsz), CuRCpair{T}(undef, padsz))
     num = CuRCpair{T}(undef, padsz)
     denom = CuRCpair{T}(undef, padsz)
-    mmsz = map(x->2x+1, (maxshift...,))
+    mmsz = map(x -> 2x + 1, (maxshift...,))
     numhost, denomhost = Array{T}(undef, mmsz), Array{T}(undef, mmsz)
     fftfunc, ifftfunc = plan_fft_pair(num)
     maxshiftv = [maxshift...]
-    shiftindices = Vector{Int}[ [padsz[i].+(-maxshift[i]+1:0); 1:maxshift[i]+1] for i = 1:length(maxshift) ]
-    CMStorage{T,N}(Float64[aperture_width...], maxshiftv, getindexes, setindexes, fixed, moving, num, denom, numhost, denomhost, fftfunc, ifftfunc, shiftindices)
+    shiftindices = Vector{Int}[ [padsz[i] .+ ((-maxshift[i] + 1):0); 1:(maxshift[i] + 1)] for i in 1:length(maxshift) ]
+    return CMStorage{T, N}(Float64[aperture_width...], maxshiftv, getindexes, setindexes, fixed, moving, num, denom, numhost, denomhost, fftfunc, ifftfunc, shiftindices)
 end
 
-CMStorage{T}(::UndefInitializer, aperture_width::NTuple{N,<:Real}, maxshift::Dims{N}) where {T<:AbstractFloat,N} =
-    CMStorage{T,N}(undef, aperture_width, maxshift)
+CMStorage{T}(::UndefInitializer, aperture_width::NTuple{N, <:Real}, maxshift::Dims{N}) where {T <: AbstractFloat, N} =
+    CMStorage{T, N}(undef, aperture_width, maxshift)
 
 # Note: display doesn't do anything, but here for compatibility with the CPU version
-CMStorage{T}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N}; display=false) where {T<:Real,N} = CMStorage{T}(undef, blocksize, maxshift)
-CMStorage{T,N}(::UndefInitializer, blocksize::NTuple{N,<:Real}, maxshift::Dims{N}; display=false) where {T<:Real,N} = CMStorage{T,N}(undef, blocksize, maxshift)
+CMStorage{T}(::UndefInitializer, blocksize::NTuple{N, <:Real}, maxshift::Dims{N}; display = false) where {T <: Real, N} = CMStorage{T}(undef, blocksize, maxshift)
+CMStorage{T, N}(::UndefInitializer, blocksize::NTuple{N, <:Real}, maxshift::Dims{N}; display = false) where {T <: Real, N} = CMStorage{T, N}(undef, blocksize, maxshift)
 
 CUDA.context(cms::CMStorage) = context(cms.num.C)
 
-eltype(cms::CMStorage{T,N}) where {T,N} = T
- ndims(cms::CMStorage{T,N}) where {T,N} = N
+eltype(cms::CMStorage{T, N}) where {T, N} = T
+ndims(cms::CMStorage{T, N}) where {T, N} = N
 
 # Some tools from Images
 sdims(A::CuArray) = ndims(A)
@@ -140,22 +140,22 @@ normalization scheme (`:intensity` or `:pixels`).
 
 This operation is synchronous with respect to the host.
 """
-function mismatch(::Type{T}, fixed::AbstractArray, moving::AbstractArray, maxshift::DimsLike; normalization = :intensity) where T<:Real
+function mismatch(::Type{T}, fixed::AbstractArray, moving::AbstractArray, maxshift::DimsLike; normalization = :intensity) where {T <: Real}
     assertsamesize(fixed, moving)
-    d_fixed  = CuArray{T}(fixed)
+    d_fixed = CuArray{T}(fixed)
     d_moving = CuArray{T}(moving)
-    mm = mismatch(d_fixed, d_moving, maxshift, normalization=normalization)
-    mm
+    mm = mismatch(d_fixed, d_moving, maxshift, normalization = normalization)
+    return mm
 end
 
-function mismatch(fixed::CuArray{T}, moving::CuArray{T}, maxshift::DimsLike; normalization = :intensity) where T
+function mismatch(fixed::CuArray{T}, moving::CuArray{T}, maxshift::DimsLike; normalization = :intensity) where {T}
     assertsamesize(fixed, moving)
     nd = ndims(fixed)
     cms = CMStorage{T}(undef, size(fixed), maxshift)
     mm = MismatchArray(T, (2 .* maxshift .+ 1)...)
     fillfixed!(cms, fixed)
-    mismatch!(mm, cms, moving, normalization=normalization)
-    mm
+    mismatch!(mm, cms, moving, normalization = normalization)
+    return mm
 end
 
 """
@@ -183,39 +183,43 @@ in a rectangular grid, you can use an `N`-dimensional array-of-tuples
 (or array-of-vectors) or an `N+1`-dimensional array with the center
 positions specified along the first dimension. See `aperture_grid`.
 """
-function mismatch_apertures(::Type{T},
-                            fixed::AbstractArray,
-                            moving::AbstractArray,
-                            aperture_centers::AbstractArray,
-                            aperture_width::WidthLike,
-                            maxshift::DimsLike;
-                            kwargs...) where T
+function mismatch_apertures(
+        ::Type{T},
+        fixed::AbstractArray,
+        moving::AbstractArray,
+        aperture_centers::AbstractArray,
+        aperture_width::WidthLike,
+        maxshift::DimsLike;
+        kwargs...
+    ) where {T}
     assertsamesize(fixed, moving)
-    d_fixed  = CuArray{T}(sdata(fixed))
+    d_fixed = CuArray{T}(sdata(fixed))
     d_moving = CuArray{T}(moving)
     mms = mismatch_apertures(d_fixed, d_moving, aperture_centers, aperture_width, maxshift; kwargs...)
-    mms
+    return mms
 end
 
 # only difference here relative to RegisterMismatch is the lack of the
 # FFTW keywords
-function mismatch_apertures(fixed::CuArray{T},
-                            moving::CuArray,
-                            aperture_centers::AbstractArray,
-                            aperture_width::WidthLike,
-                            maxshift::DimsLike;
-                            normalization = :pixels,
-                            kwargs...) where T
+function mismatch_apertures(
+        fixed::CuArray{T},
+        moving::CuArray,
+        aperture_centers::AbstractArray,
+        aperture_width::WidthLike,
+        maxshift::DimsLike;
+        normalization = :pixels,
+        kwargs...
+    ) where {T}
     nd = sdims(fixed)
-    assertsamesize(fixed,moving)
+    assertsamesize(fixed, moving)
     (length(aperture_width) == nd && length(maxshift) == nd) || error("Dimensionality mismatch")
     mms = allocate_mmarrays(T, aperture_centers, maxshift)
     cms = CMStorage{T}(undef, aperture_width, maxshift; kwargs...)
-    mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normalization=normalization)
-    mms
+    mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normalization = normalization)
+    return mms
 end
 
-function fillfixed!(cms::CMStorage{T}, fixed::CuArray; f_indexes = ntuple(i->1:size(fixed,i), ndims(fixed))) where T
+function fillfixed!(cms::CMStorage{T}, fixed::CuArray; f_indexes = ntuple(i -> 1:size(fixed, i), ndims(fixed))) where {T}
     ctx = context(cms)
     context(fixed) == ctx || error("Fixed and cms must be on the same context")
     nd = ndims(cms)
@@ -227,17 +231,17 @@ function fillfixed!(cms::CMStorage{T}, fixed::CuArray; f_indexes = ntuple(i->1:s
     fill!(paddedf, NaN)
     dstindexes = Array{UnitRange{Int}}(undef, nd)
     srcindexes = Array{UnitRange{Int}}(undef, nd)
-    for idim = 1:nd
+    for idim in 1:nd
         tmp = f_indexes[idim]
-        i1 = first(tmp) >= 1 ? 1 : 2-first(tmp)
-        i2 = last(tmp) <= size(fixed, idim) ? length(tmp) : length(tmp)-(last(tmp)-size(fixed, idim))
+        i1 = first(tmp) >= 1 ? 1 : 2 - first(tmp)
+        i2 = last(tmp) <= size(fixed, idim) ? length(tmp) : length(tmp) - (last(tmp) - size(fixed, idim))
         srcindexes[idim] = tmp[i1]:tmp[i2]
         dstindexes[idim] = cms.setindexes[idim][i1]:cms.setindexes[idim][i2]
     end
     copyto!(paddedf, CartesianIndices(Tuple(dstindexes)), fixed, CartesianIndices(Tuple(srcindexes))) #This conversion may be inefficient.
     # Prepare the components of the convolution
-    threadspb = calculate_threads(size(paddedf), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
-    nblocks = ceil.(Int, size(paddedf)./ threadspb)
+    threadspb = calculate_threads(size(paddedf), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) ÷ 2)
+    nblocks = ceil.(Int, size(paddedf) ./ threadspb)
     @cuda blocks = nblocks threads = threadspb kernel_conv_components!(paddedf, cms.fixed.I2.R, cms.fixed.I0.R)
     synchronize()
     # Compute FFTs
@@ -245,7 +249,7 @@ function fillfixed!(cms::CMStorage{T}, fixed::CuArray; f_indexes = ntuple(i->1:s
     for item in (obj.I0, obj.I1, obj.I2)
         copyto!(item.C, cms.fftfunc * item.R[item.rng...])
     end
-    obj
+    return obj
 end
 
 """
@@ -253,7 +257,7 @@ end
 computes the mismatch as a function of shift, storing the result in
 `mm`. The `fixed` image has been prepared in `cms`, a `CMStorage` object.
 """
-function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normalization = :intensity, m_offset = ntuple(i->0, ndims(cms))) where T
+function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normalization = :intensity, m_offset = ntuple(i -> 0, ndims(cms))) where {T}
     ctx = context(cms)
     context(moving) == ctx || error("Fixed and cms must be on the same context")
     activate(ctx)
@@ -261,10 +265,10 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     checksize_maxshift(mm, cms.maxshift)
     nd = ndims(cms)
     paddedm = cms.moving.I1.R
-    get!(paddedm, moving, ntuple(d->cms.getindexes[d].+m_offset[d], nd), T(NaN))
+    get!(paddedm, moving, ntuple(d -> cms.getindexes[d] .+ m_offset[d], nd), T(NaN))
     # Prepare the components of the convolution
-    threadspb = calculate_threads(size(paddedm), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
-    nblocks = ceil.(Int, size(paddedm)./ threadspb)
+    threadspb = calculate_threads(size(paddedm), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) ÷ 2)
+    nblocks = ceil.(Int, size(paddedm) ./ threadspb)
     @cuda blocks = nblocks threads = threadspb kernel_conv_components!(paddedm, cms.moving.I2.R, cms.moving.I0.R)
     synchronize()
     # Compute FFTs
@@ -275,11 +279,13 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     # Perform the convolution in fourier space
     d_numC = cms.num.C
     d_denomC = cms.denom.C
-    args = (cms.fixed.I1.C,  cms.fixed.I2.C,  cms.fixed.I0.C,
-            cms.moving.I1.C, cms.moving.I2.C, cms.moving.I0.C,
-            cms.num.C, cms.denom.C)
-    threadspb = calculate_threads(size(d_numC), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)÷2)
-    nblocks = ceil.(Int, size(d_numC)./ threadspb)
+    args = (
+        cms.fixed.I1.C, cms.fixed.I2.C, cms.fixed.I0.C,
+        cms.moving.I1.C, cms.moving.I2.C, cms.moving.I0.C,
+        cms.num.C, cms.denom.C,
+    )
+    threadspb = calculate_threads(size(d_numC), attribute(dev, CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) ÷ 2)
+    nblocks = ceil.(Int, size(d_numC) ./ threadspb)
     if normalization == :intensity
         @cuda blocks = nblocks threads = threadspb kernel_calcNumDenom_intensity!(args...)
     elseif normalization == :pixels
@@ -292,11 +298,11 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
     # Compute the IFFTs
     d_num = cms.num.R
     d_denom = cms.denom.R
-    rng = CartesianIndices(cms.num.rng);
+    rng = CartesianIndices(cms.num.rng)
     copyto!(d_num, rng, cms.ifftfunc * d_numC, rng)
     copyto!(d_denom, rng, cms.ifftfunc * d_denomC, rng)
     # Copy result to host
-    copyto!(mm, (view(Array(d_num), cms.shiftindices...), view(Array(d_denom), cms.shiftindices...)))
+    return copyto!(mm, (view(Array(d_num), cms.shiftindices...), view(Array(d_denom), cms.shiftindices...)))
 end
 
 """
@@ -308,36 +314,36 @@ in `cms`, a `CMStorage` object. The results are stored in `mms`, an
 Array-of-MismatchArrays which must have length equal to the number of
 aperture centers.
 """
-function mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normalization=:pixels)
+function mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normalization = :pixels)
     assertsamesize(fixed, moving)
     N = ndims(cms)
-    for (mm,center) in zip(mms, each_point(aperture_centers))
+    for (mm, center) in zip(mms, each_point(aperture_centers))
         rng = aperture_range(center, cms.aperture_width)
-        fillfixed!(cms, fixed; f_indexes=rng)
-        offset = [first(rng[d])-1 for d = 1:N]
-        mismatch!(mm, cms, moving; normalization=normalization, m_offset=offset)
+        fillfixed!(cms, fixed; f_indexes = rng)
+        offset = [first(rng[d]) - 1 for d in 1:N]
+        mismatch!(mm, cms, moving; normalization = normalization, m_offset = offset)
     end
     synchronize()
-    mms
+    return mms
 end
 
 
 ### Utilities
 
 function assertsamesize(A::AbstractArray, B::AbstractArray)
-    size(A,1) == size(B,1) && size(A,2) == size(B,2) && size(A,3) == size(B,3) || error("Arrays are not the same size")
+    return size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) && size(A, 3) == size(B, 3) || error("Arrays are not the same size")
 end
 
 ### Deprecations
 
-@deprecate CuRCpair(realtype::Type{T}, realsize) where {T<:AbstractFloat} CuRCpair{T}(undef, realsize)
+@deprecate CuRCpair(realtype::Type{T}, realsize) where {T <: AbstractFloat} CuRCpair{T}(undef, realsize)
 
-function CMStorage{T}(::UndefInitializer, aperture_width::WidthLike, maxshift::DimsLike; kwargs...) where {T<:Real}
+function CMStorage{T}(::UndefInitializer, aperture_width::WidthLike, maxshift::DimsLike; kwargs...) where {T <: Real}
     Base.depwarn("CMStorage with aperture_width::$(typeof(aperture_width)) and maxshift::$(typeof(maxshift)) is deprecated, use tuples instead", :CMStorage)
     (N = length(aperture_width)) == length(maxshift) || error("Dimensionality mismatch")
-    return CMStorage{T,N}(undef, (aperture_width...,), (maxshift...,); kwargs...)
+    return CMStorage{T, N}(undef, (aperture_width...,), (maxshift...,); kwargs...)
 end
 
-@deprecate CMStorage(::Type{T}, aperture_width::WidthLike, maxshift::DimsLike; kwargs...) where {T<:AbstractFloat}  CMStorage{T}(undef, aperture_width, maxshift; kwargs...)
+@deprecate CMStorage(::Type{T}, aperture_width::WidthLike, maxshift::DimsLike; kwargs...) where {T <: AbstractFloat}  CMStorage{T}(undef, aperture_width, maxshift; kwargs...)
 
 end # module
