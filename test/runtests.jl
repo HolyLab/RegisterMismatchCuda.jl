@@ -5,10 +5,16 @@ RM = RegisterMismatchCuda
 
 accuracy = 1.0e-5
 
+if !CUDA.functional()
+    @warn "No functional CUDA device found; skipping tests."
+    exit(0)
+end
+
 devlist = CuDevice[]
 map(dev -> capability(dev) >= v"2.0" ? push!(devlist, dev) : nothing, devices())
 if isempty(devlist)
-    error("There is no CUDA device having capability bigger than version 2.0.")
+    @warn "No CUDA device with capability >= 2.0 found; skipping tests."
+    exit(0)
 end
 
 @testset "kernel_conv_components" begin
