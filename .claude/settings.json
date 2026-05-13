@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" == *.jl ]] && julia --project -e 'using Runic; exit(Runic.main(ARGS))' -- --inplace \"$CLAUDE_TOOL_INPUT_FILE_PATH\" || true"
+          }
+        ]
+      }
+    ]
+  }
+}
