@@ -4,7 +4,6 @@ using SharedArrays, Primes, ImageCore, CUDA
 using RegisterCore, RegisterMismatchCommon
 using CUDA: CUFFT, context
 import Base: eltype, ndims
-import ImageCore: sdims, coords_spatial
 import RegisterMismatchCommon: mismatch, mismatch_apertures, mismatch0
 
 export
@@ -121,10 +120,6 @@ CUDA.context(cms::CMStorage) = context(cms.num.C)
 eltype(cms::CMStorage{T, N}) where {T, N} = T
 ndims(cms::CMStorage{T, N}) where {T, N} = N
 
-# Some tools from Images
-sdims(A::CuArray) = ndims(A)
-coords_spatial(A::CuArray) = 1:ndims(A)
-
 ### Main API
 
 """
@@ -210,7 +205,7 @@ function mismatch_apertures(
         normalization = :pixels,
         kwargs...
     ) where {T}
-    nd = sdims(fixed)
+    nd = ndims(fixed)
     assertsamesize(fixed, moving)
     (length(aperture_width) == nd && length(maxshift) == nd) || error("Dimensionality mismatch")
     mms = allocate_mmarrays(T, aperture_centers, maxshift)

@@ -1,9 +1,22 @@
 using Test, ImageCore, ImageFiltering
 using CUDA, RegisterCore, CenterIndexedArrays
+using Aqua
 import RegisterMismatchCuda
+import RegisterMismatchCommon
 RM = RegisterMismatchCuda
 
 accuracy = 1.0e-5
+
+@testset "Aqua" begin
+    Aqua.test_all(
+        RegisterMismatchCuda;
+        piracies = (; treat_as_own = [
+            RegisterMismatchCommon.mismatch,
+            RegisterMismatchCommon.mismatch_apertures,
+            RegisterMismatchCommon.mismatch0,
+        ]),
+    )
+end
 
 if !CUDA.functional()
     @warn "No functional CUDA device found; skipping tests."
