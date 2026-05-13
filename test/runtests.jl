@@ -1,6 +1,6 @@
 using Test, ImageCore, ImageFiltering
 using CUDA, RegisterCore, CenterIndexedArrays
-using Aqua
+using Aqua, ExplicitImports
 import RegisterMismatchCuda
 import RegisterMismatchCommon
 RM = RegisterMismatchCuda
@@ -15,6 +15,17 @@ accuracy = 1.0e-5
             RegisterMismatchCommon.mismatch_apertures,
             RegisterMismatchCommon.mismatch0,
         ]),
+    )
+end
+
+@testset "ExplicitImports" begin
+    test_explicit_imports(RegisterMismatchCuda;
+        # mismatch_apertures is non-public in RegisterMismatchCommon (upstream issue)
+        all_explicit_imports_are_public=(; ignore=(:mismatch_apertures,)),
+        # plan_inv lives in AbstractFFTs but is called via CUDA.CUFFT (the concrete implementor)
+        all_qualified_accesses_via_owners=(; ignore=(:plan_inv,)),
+        # plan_inv and DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK are non-public CUDA/AbstractFFTs internals
+        all_qualified_accesses_are_public=(; ignore=(:plan_inv, :DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)),
     )
 end
 

@@ -1,8 +1,13 @@
 module RegisterMismatchCuda
 
-using SharedArrays, Primes, ImageCore, CUDA
-using RegisterCore, RegisterMismatchCommon
-using CUDA: CUFFT, context
+using CUDA: CUDA, CUFFT, @cuda, CuArray, activate, attribute, blockDim, blockIdx, context, device,
+    synchronize, threadIdx
+using ImageCore: ImageCore
+using Primes: Primes, factor
+using RegisterCore: RegisterCore, MismatchArray, maxshift
+using RegisterMismatchCommon: RegisterMismatchCommon, DimsLike, WidthLike, allocate_mmarrays,
+    aperture_range, checksize_maxshift, each_point, padranges, padsize
+using SharedArrays: SharedArrays, sdata
 import Base: eltype, ndims
 import RegisterMismatchCommon: mismatch, mismatch_apertures, mismatch0
 
