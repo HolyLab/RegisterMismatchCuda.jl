@@ -15,7 +15,7 @@ accuracy = 1.0e-5
             RegisterMismatchCommon.mismatch_apertures,
             RegisterMismatchCommon.mismatch0,
         ]),
-        persistent_tasks = true,
+        persistent_tasks = (; broken = VERSION < v"1.11"),
     )
 end
 
