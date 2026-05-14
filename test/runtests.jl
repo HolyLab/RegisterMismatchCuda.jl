@@ -15,9 +15,7 @@ accuracy = 1.0e-5
             RegisterMismatchCommon.mismatch_apertures,
             RegisterMismatchCommon.mismatch0,
         ]),
-        # AtomixCUDAExt (a CUDA.jl transitive dep) declares __precompile__(false),
-        # which crashes Aqua's precompilation subprocess — mark broken until fixed upstream.
-        persistent_tasks = (; broken = true),
+        persistent_tasks = true,
     )
 end
 
