@@ -40,7 +40,7 @@ RegisterMismatchCuda
 
 """
     CuRCpair{T}(undef, realsize::Dims{N})
-    CuRCpair(A::Array{T})
+    CuRCpair(A::AbstractArray{T})
 
 A paired real/complex `CuArray` sharing GPU memory, used for in-place FFT computations.
 
@@ -49,7 +49,7 @@ complex array `C` of size `(realsize[1]÷2+1, realsize[2:end]...)` that share th
 underlying GPU memory (matching the layout of a real-to-complex FFT plan). The field `rng`
 holds `UnitRange`s indexing the unpadded region of `R`.
 
-`CuRCpair(A::Array{T})` uploads the host array `A` into the real part of a newly
+`CuRCpair(A::AbstractArray{T})` uploads the host array `A` into the real part of a newly
 allocated pair.
 
 Fields:
@@ -73,7 +73,7 @@ function CuRCpair{T}(::UndefInitializer, realsize::Dims{N}) where {T <: Abstract
     return CuRCpair{T, N}(R, C, rng)
 end
 
-function CuRCpair(A::Array{T}) where {T <: AbstractFloat}
+function CuRCpair(A::AbstractArray{T}) where {T <: AbstractFloat}
     P = CuRCpair{T}(undef, size(A))
     copyto!(view(P.R, P.rng...), A)
     return P
@@ -245,7 +245,7 @@ function mismatch_apertures(
     (length(aperture_width) == nd && length(maxshift) == nd) || error("Dimensionality mismatch")
     mms = allocate_mmarrays(T, aperture_centers, maxshift)
     cms = CMStorage{T}(undef, aperture_width, maxshift; kwargs...)
-    mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normalization = normalization)
+    mismatch_apertures!(mms, cms, fixed, moving, aperture_centers; normalization = normalization)
     return mms
 end
 
@@ -359,7 +359,7 @@ function mismatch!(mm::MismatchArray, cms::CMStorage{T}, moving::CuArray; normal
 end
 
 """
-    mismatch_apertures!(mms, fixed, moving, aperture_centers, cms;
+    mismatch_apertures!(mms, cms, fixed, moving, aperture_centers;
                         normalization=:pixels) -> Array{MismatchArray}
 
 Compute the mismatch between `fixed` and `moving` over a list of apertures, storing
@@ -380,10 +380,17 @@ cms = CMStorage{Float32}(undef, aperture_width, maxshift)
 mms = allocate_mmarrays(Float32, aperture_centers, maxshift)
 d_fixed = CuArray(rand(Float32, 128, 128))
 d_moving = CuArray(rand(Float32, 128, 128))
-mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms)
+mismatch_apertures!(mms, cms, d_fixed, d_moving, aperture_centers)
 ```
 """
-function mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normalization = :pixels)
+function mismatch_apertures!(
+        mms::AbstractArray{<:MismatchArray},
+        cms::CMStorage,
+        fixed::CuArray,
+        moving::CuArray,
+        aperture_centers::AbstractArray;
+        normalization = :pixels,
+    )
     assertsamesize(fixed, moving)
     N = ndims(cms)
     for (mm, center) in zip(mms, each_point(aperture_centers))
@@ -394,6 +401,16 @@ function mismatch_apertures!(mms, fixed, moving, aperture_centers, cms; normaliz
     end
     synchronize()
     return mms
+end
+
+# Deprecated argument order: (mms, fixed, moving, aperture_centers, cms)
+function mismatch_apertures!(mms, fixed, moving, aperture_centers, cms::CMStorage; normalization = :pixels)
+    Base.depwarn(
+        "`mismatch_apertures!(mms, fixed, moving, aperture_centers, cms)` is deprecated. " *
+        "Use `mismatch_apertures!(mms, cms, fixed, moving, aperture_centers)` instead.",
+        :mismatch_apertures!,
+    )
+    return mismatch_apertures!(mms, cms, fixed, moving, aperture_centers; normalization)
 end
 
 

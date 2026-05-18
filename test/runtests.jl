@@ -159,10 +159,10 @@ end
             mm = RM.mismatch(A, A, maxshift)
             num, denom = RegisterCore.separate(mm)
             RegisterMismatchCommon.truncatenoise!(mm, 0.01)
-            @test RegisterCore.indmin_mismatch(mm, 0.01) == CartesianIndex((0, 0))
+            @test RegisterCore.argmin_mismatch(mm, 0.01) == CartesianIndex((0, 0))
             mm = RM.mismatch(A, B, maxshift)
             RegisterMismatchCommon.truncatenoise!(mm, 0.01)
-            @test RegisterCore.indmin_mismatch(mm, 0.01) == CartesianIndex((1, 2))
+            @test RegisterCore.argmin_mismatch(mm, 0.01) == CartesianIndex((1, 2))
 
             # Testing on more complex objects
             # img = rand(map(UInt8,0:255), 256, 256)
@@ -176,7 +176,7 @@ end
             moving = map(Float32, img[rng[1] .+ 6, rng[2] .- 8])
             maxshift = (10, 10)
             mm = RM.mismatch(fixed, moving, maxshift)
-            @test RegisterCore.indmin_mismatch(mm, 0.01) == CartesianIndex((-6, 8))
+            @test RegisterCore.argmin_mismatch(mm, 0.01) == CartesianIndex((-6, 8))
         end
     end
 end
@@ -276,6 +276,30 @@ end
             cms = RM.CMStorage{Float32}(undef, (8, 8), (2, 2))
             @test eltype(cms) == Float32
             @test ndims(cms) == 2
+        end
+    end
+end
+
+@testset "CMStorage{T,N} display-compat constructor" begin
+    for dev in devlist
+        device!(dev) do
+            cms = RM.CMStorage{Float32, 2}(undef, (8, 8), (2, 2); display = false)
+            @test eltype(cms) == Float32
+            @test ndims(cms) == 2
+        end
+    end
+end
+
+@testset "mismatch_apertures! deprecated argument order" begin
+    for dev in devlist
+        device!(dev) do
+            fixed = CuArray(rand(Float32, 15, 15))
+            moving = CuArray(rand(Float32, 15, 15))
+            aperture_centers = [(8.0, 8.0)]
+            maxshift = (3, 3)
+            cms = RM.CMStorage{Float32}(undef, (8, 8), maxshift)
+            mms = [RegisterCore.MismatchArray(Float32, 7, 7)]
+            @test_deprecated RM.mismatch_apertures!(mms, fixed, moving, aperture_centers, cms)
         end
     end
 end
