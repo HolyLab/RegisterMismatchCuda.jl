@@ -149,8 +149,8 @@ CMStorage{T}(::UndefInitializer, aperture_width::NTuple{N, <:Real}, maxshift::Di
     CMStorage{T, N}(undef, aperture_width, maxshift)
 
 # Note: display doesn't do anything, but here for compatibility with the CPU version
-CMStorage{T}(::UndefInitializer, blocksize::NTuple{N, <:Real}, maxshift::Dims{N}; display = false) where {T <: AbstractFloat, N} = CMStorage{T}(undef, blocksize, maxshift)
-CMStorage{T, N}(::UndefInitializer, blocksize::NTuple{N, <:Real}, maxshift::Dims{N}; display = false) where {T <: AbstractFloat, N} = CMStorage{T, N}(undef, blocksize, maxshift)
+CMStorage{T}(::UndefInitializer, blocksize::NTuple{N, <:Real}, maxshift::Dims{N}; display = false) where {T <: Real, N} = CMStorage{T}(undef, blocksize, maxshift)
+CMStorage{T, N}(::UndefInitializer, blocksize::NTuple{N, <:Real}, maxshift::Dims{N}; display = false) where {T <: Real, N} = CMStorage{T, N}(undef, blocksize, maxshift)
 
 CUDA.context(cms::CMStorage) = context(cms.num.C)
 
